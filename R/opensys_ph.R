@@ -63,9 +63,14 @@ opensys_ph <- function(water, partialpressure = 10^-3.42) {
 #' @returns `opensys_ph_df` returns a data frame containing a water class column with updated ph and alk (and pH dependent ions).
 #' Optionally, it also adds columns for each of those slots individually.
 
-opensys_ph_df <- function(df, input_water = "defined", output_water = "opensys",
-                          pluck_cols = FALSE, water_prefix = TRUE,
-                          partialpressure = "use_col") {
+opensys_ph_df <- function(
+  df,
+  input_water = "defined",
+  output_water = "opensys",
+  pluck_cols = FALSE,
+  water_prefix = TRUE,
+  partialpressure = "use_col"
+) {
   validate_water_helpers(df, input_water)
   # This allows for the function to process unquoted column names without erroring
   partialpressure <- tryCatch(partialpressure, error = function(e) enquo(partialpressure))
@@ -80,18 +85,31 @@ opensys_ph_df <- function(df, input_water = "defined", output_water = "opensys",
 
   # Add columns with default arguments
   defaults_added <- handle_defaults(
-    df, final_names,
+    df,
+    final_names,
     list(partialpressure = 10^-3.42)
   )
   df <- defaults_added$data
 
+warning_counts <- list()
+
   df[[output_water]] <- lapply(seq_len(nrow(df)), function(i) {
+    withCallingHandlers(
     opensys_ph(
       water = df[[input_water]][[i]],
       partialpressure = df[[final_names$partialpressure]][i]
-    )
+    ),
+    warning = function(w) {
+      msg <- conditionMessage(w)
+      warning_counts[[msg]] <<- (warning_counts[[msg]] %||% 0) +1L
+      invokeRestart("muffleWarning")
   })
+})
 
+for (msg in names(warning_counts)) {
+    cli::cli_warn("{msg} ({warning_counts[[msg]]} row{?s} affected.)")
+  }
+    
   output <- df[, !names(df) %in% defaults_added$defaults_used]
   output <- df
 
@@ -104,4 +122,4 @@ opensys_ph_df <- function(df, input_water = "defined", output_water = "opensys",
   }
 
   return(output)
-}
+  }

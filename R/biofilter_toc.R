@@ -100,9 +100,15 @@ biofilter_toc <- function(water, ebct, ozonated = TRUE) {
 #' @returns `biofilter_toc_df` returns a data frame containing a water class column with updated DOC, TOC, and BDOC
 #' concentrations. Optionally, it also adds columns for each of those slots individually.
 
-biofilter_toc_df <- function(df, input_water = "defined", output_water = "biofiltered",
-                             pluck_cols = FALSE, water_prefix = TRUE,
-                             ebct = "use_col", ozonated = "use_col") {
+biofilter_toc_df <- function(
+  df,
+  input_water = "defined",
+  output_water = "biofiltered",
+  pluck_cols = FALSE,
+  water_prefix = TRUE,
+  ebct = "use_col",
+  ozonated = "use_col"
+) {
   validate_water_helpers(df, input_water)
   # This allows for the function to process unquoted column names without erroring
   ebct <- tryCatch(ebct, error = function(e) enquo(ebct))
@@ -118,13 +124,25 @@ biofilter_toc_df <- function(df, input_water = "defined", output_water = "biofil
   defaults_added <- handle_defaults(df, final_names, list(ozonated = TRUE))
   df <- defaults_added$data
 
+  warning_counts <- list()
   df[[output_water]] <- lapply(seq_len(nrow(df)), function(i) {
-    biofilter_toc(
-      water = df[[input_water]][[i]],
-      ebct = df[[final_names$ebct]][i],
-      ozonated = df[[final_names$ozonated]][i]
+    withCallingHandlers(
+      biofilter_toc(
+        water = df[[input_water]][[i]],
+        ebct = df[[final_names$ebct]][i],
+        ozonated = df[[final_names$ozonated]][i]
+      ),
+      warning = function(w) {
+        msg <- conditionMessage(w)
+        warning_counts[[msg]] <<- (warning_counts[[msg]] %||% 0) +1L
+        invokeRestart("muffleWarning")
+      }
     )
   })
+
+  for(msg in names(warning_counts)){
+    cli::cli_warn("{msg} ({warning_counts[[msg]]] row{?s} affected.)")
+  }
 
   output <- df[, !names(df) %in% defaults_added$defaults_used]
 
